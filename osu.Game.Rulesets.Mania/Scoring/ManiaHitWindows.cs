@@ -2,6 +2,7 @@
 // See the LICENCE file in the repository root for full licence text.
 
 using osu.Game.Rulesets.Scoring;
+using System;
 
 namespace osu.Game.Rulesets.Mania.Scoring
 {
@@ -21,6 +22,19 @@ namespace osu.Game.Rulesets.Mania.Scoring
             }
 
             return false;
+        }
+
+        public override HitResult ResultFor(double timeOffset)
+        {
+            timeOffset = Math.Abs(Math.Round(timeOffset));
+
+            for (var result = HitResult.Perfect; result >= HitResult.Miss; --result)
+            {
+                if (IsHitResultAllowed(result) && timeOffset <= Math.Floor(WindowFor(result)))
+                    return result;
+            }
+
+            return HitResult.None;
         }
     }
 }
