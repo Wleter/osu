@@ -128,7 +128,7 @@ namespace osu.Game.Rulesets.Scoring
 
             for (var result = HitResult.Perfect; result >= HitResult.Miss; --result)
             {
-                if (IsHitResultAllowed(result) && timeOffset < WindowFor(result))
+                if (IsHitResultAllowed(result) && timeOffset <= WindowFor(result))
                     return result;
             }
 
