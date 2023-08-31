@@ -37,6 +37,7 @@ namespace osu.Game.Rulesets.Taiko.Scoring
                 if (IsHitResultAllowed(result) && timeOffset < Math.Floor(WindowFor(result)))
                     return result;
             }
+
             if (IsHitResultAllowed(HitResult.Miss) && timeOffset <= Math.Floor(WindowFor(HitResult.Miss)))
                 return HitResult.Miss;
 
