@@ -152,12 +152,6 @@ namespace osu.Game.Rulesets.Osu.Difficulty.Preprocessing
             // We will scale distances by this factor, so we can assume a uniform CircleSize among beatmaps.
             float scalingFactor = NORMALISED_RADIUS / (float)BaseObject.Radius;
 
-            if (BaseObject.Radius < 30)
-            {
-                float smallCircleBonus = Math.Min(30 - (float)BaseObject.Radius, 5) / 50;
-                scalingFactor *= 1 + smallCircleBonus;
-            }
-
             Vector2 lastCursorPosition = getEndCursorPosition(lastObject);
 
             LazyJumpDistance = (BaseObject.StackedPosition * scalingFactor - lastCursorPosition * scalingFactor).Length;
