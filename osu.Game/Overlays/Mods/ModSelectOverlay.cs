@@ -115,6 +115,7 @@ namespace osu.Game.Overlays.Mods
         public IEnumerable<ModState> AllAvailableMods => AvailableMods.Value.SelectMany(pair => pair.Value);
 
         private readonly BindableBool customisationVisible = new BindableBool();
+        private Bindable<bool> textSearchStartsActive = null!;
 
         private ModSettingsArea modSettingsArea = null!;
         private ColumnScrollContainer columnScroll = null!;
@@ -130,6 +131,8 @@ namespace osu.Game.Overlays.Mods
         protected ShearedButton BackButton { get; private set; } = null!;
         protected ShearedToggleButton? CustomisationButton { get; private set; }
         protected SelectAllModsButton? SelectAllModsButton { get; set; }
+
+        private bool textBoxShouldFocus;
 
         private Sample? columnAppearSample;
 
@@ -154,7 +157,7 @@ namespace osu.Game.Overlays.Mods
         }
 
         [BackgroundDependencyLoader]
-        private void load(OsuGameBase game, OsuColour colours, AudioManager audio)
+        private void load(OsuGameBase game, OsuColour colours, AudioManager audio, OsuConfigManager configManager)
         {
             Header.Title = ModSelectOverlayStrings.ModSelectTitle;
             Header.Description = ModSelectOverlayStrings.ModSelectDescription;
@@ -282,6 +285,8 @@ namespace osu.Game.Overlays.Mods
             }
 
             globalAvailableMods.BindTo(game.AvailableMods);
+
+            textSearchStartsActive = configManager.GetBindable<bool>(OsuSetting.ModSelectTextSearchStartsActive);
         }
 
         public override void Hide()
@@ -505,6 +510,11 @@ namespace osu.Game.Overlays.Mods
 
             modSettingsArea.ResizeHeightTo(modAreaHeight, transition_duration, Easing.InOutCubic);
             TopLevelContent.MoveToY(-modAreaHeight, transition_duration, Easing.InOutCubic);
+
+            if (customisationVisible.Value)
+                SearchTextBox.KillFocus();
+            else
+                setTextBoxFocus(textBoxShouldFocus);
         }
 
         /// <summary>
@@ -604,7 +614,7 @@ namespace osu.Game.Overlays.Mods
                     if (columnNumber > 5 && !column.Active.Value) return;
 
                     // use X position of the column on screen as a basis for panning the sample
-                    float balance = column.Parent.BoundingBox.Centre.X / RelativeToAbsoluteFactor.X;
+                    float balance = column.Parent!.BoundingBox.Centre.X / RelativeToAbsoluteFactor.X;
 
                     // dip frequency and ramp volume of sample over the first 5 displayed columns
                     float progress = Math.Min(1, columnNumber / 5f);
@@ -617,6 +627,8 @@ namespace osu.Game.Overlays.Mods
 
                 nonFilteredColumnCount += 1;
             }
+
+            setTextBoxFocus(textSearchStartsActive.Value);
         }
 
         protected override void PopOut()
@@ -755,12 +767,18 @@ namespace osu.Game.Overlays.Mods
                 return false;
 
             // TODO: should probably eventually support typical platform search shortcuts (`Ctrl-F`, `/`)
-            if (SearchTextBox.HasFocus)
-                SearchTextBox.KillFocus();
-            else
-                SearchTextBox.TakeFocus();
-
+            setTextBoxFocus(!textBoxShouldFocus);
             return true;
+        }
+
+        private void setTextBoxFocus(bool keepFocus)
+        {
+            textBoxShouldFocus = keepFocus;
+
+            if (textBoxShouldFocus)
+                SearchTextBox.TakeFocus();
+            else
+                SearchTextBox.KillFocus();
         }
 
         #endregion

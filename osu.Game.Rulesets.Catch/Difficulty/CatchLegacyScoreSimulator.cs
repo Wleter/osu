@@ -2,10 +2,13 @@
 // See the LICENCE file in the repository root for full licence text.
 
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using osu.Game.Beatmaps;
+using osu.Game.Rulesets.Catch.Mods;
 using osu.Game.Rulesets.Catch.Objects;
-using osu.Game.Rulesets.Judgements;
+using osu.Game.Rulesets.Catch.Scoring;
+using osu.Game.Rulesets.Mods;
 using osu.Game.Rulesets.Objects;
 using osu.Game.Rulesets.Objects.Types;
 using osu.Game.Rulesets.Scoring;
@@ -15,6 +18,8 @@ namespace osu.Game.Rulesets.Catch.Difficulty
 {
     internal class CatchLegacyScoreSimulator : ILegacyScoreSimulator
     {
+        private readonly ScoreProcessor scoreProcessor = new CatchScoreProcessor();
+
         private int legacyBonusScore;
         private int standardisedBonusScore;
         private int combo;
@@ -71,6 +76,8 @@ namespace osu.Game.Rulesets.Catch.Difficulty
                 simulateHit(obj, ref attributes);
 
             attributes.BonusScoreRatio = legacyBonusScore == 0 ? 0 : (double)standardisedBonusScore / legacyBonusScore;
+            attributes.BonusScore = legacyBonusScore;
+            attributes.MaxCombo = combo;
 
             return attributes;
         }
@@ -129,13 +136,61 @@ namespace osu.Game.Rulesets.Catch.Difficulty
             if (isBonus)
             {
                 legacyBonusScore += scoreIncrease;
-                standardisedBonusScore += Judgement.ToNumericResult(bonusResult);
+                standardisedBonusScore += scoreProcessor.GetBaseScoreForResult(bonusResult);
             }
             else
                 attributes.AccuracyScore += scoreIncrease;
 
             if (increaseCombo)
                 combo++;
+        }
+
+        public double GetLegacyScoreMultiplier(IReadOnlyList<Mod> mods, LegacyBeatmapConversionDifficultyInfo difficulty)
+        {
+            bool scoreV2 = mods.Any(m => m is ModScoreV2);
+
+            double multiplier = 1.0;
+
+            foreach (var mod in mods)
+            {
+                switch (mod)
+                {
+                    case CatchModNoFail:
+                        multiplier *= scoreV2 ? 1.0 : 0.5;
+                        break;
+
+                    case CatchModEasy:
+                        multiplier *= 0.5;
+                        break;
+
+                    case CatchModHalfTime:
+                    case CatchModDaycore:
+                        multiplier *= 0.3;
+                        break;
+
+                    case CatchModHidden:
+                        multiplier *= scoreV2 ? 1.0 : 1.06;
+                        break;
+
+                    case CatchModHardRock:
+                        multiplier *= 1.12;
+                        break;
+
+                    case CatchModDoubleTime:
+                    case CatchModNightcore:
+                        multiplier *= 1.06;
+                        break;
+
+                    case CatchModFlashlight:
+                        multiplier *= 1.12;
+                        break;
+
+                    case CatchModRelax:
+                        return 0;
+                }
+            }
+
+            return multiplier;
         }
     }
 }

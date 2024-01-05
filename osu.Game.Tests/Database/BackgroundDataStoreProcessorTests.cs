@@ -127,8 +127,12 @@ namespace osu.Game.Tests.Database
             });
         }
 
-        [Test]
-        public void TestScoreUpgradeSuccess()
+        [TestCase(30000001)]
+        [TestCase(30000002)]
+        [TestCase(30000003)]
+        [TestCase(30000004)]
+        [TestCase(30000005)]
+        public void TestScoreUpgradeSuccess(int scoreVersion)
         {
             ScoreInfo scoreInfo = null!;
 
@@ -138,7 +142,7 @@ namespace osu.Game.Tests.Database
                 {
                     r.Add(scoreInfo = new ScoreInfo(ruleset: r.All<RulesetInfo>().First(), beatmap: r.All<BeatmapInfo>().First())
                     {
-                        TotalScoreVersion = 30000002,
+                        TotalScoreVersion = scoreVersion,
                         LegacyTotalScore = 123456,
                         IsLegacyScore = true,
                     });

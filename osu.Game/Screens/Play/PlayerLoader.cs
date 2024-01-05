@@ -263,10 +263,6 @@ namespace osu.Game.Screens.Play
 
             Debug.Assert(CurrentPlayer != null);
 
-            var lastScore = CurrentPlayer.Score;
-
-            AudioSettings.ReferenceScore.Value = lastScore?.ScoreInfo;
-
             // prepare for a retry.
             CurrentPlayer = null;
             playerConsumed = false;
@@ -414,6 +410,8 @@ namespace osu.Game.Screens.Play
             quickRestart = quickRestartRequested;
             hideOverlays = true;
             ValidForResume = true;
+
+            this.MakeCurrent();
         }
 
         private void contentIn()
