@@ -4,6 +4,7 @@
 #nullable disable
 
 using System;
+using System.Collections.Immutable;
 using osu.Framework.Allocation;
 using osu.Framework.Bindables;
 using osu.Framework.Graphics;
@@ -64,7 +65,7 @@ namespace osu.Game.Screens.Select
                 Sort = sortMode.Value,
                 AllowConvertedBeatmaps = showConverted.Value,
                 Ruleset = ruleset.Value,
-                CollectionBeatmapMD5Hashes = collectionDropdown.Current.Value?.Collection?.PerformRead(c => c.BeatmapMD5Hashes)
+                CollectionBeatmapMD5Hashes = collectionDropdown.Current.Value?.Collection?.PerformRead(c => c.BeatmapMD5Hashes).ToImmutableHashSet()
             };
 
             if (!minimumStars.IsDefault)
@@ -250,7 +251,7 @@ namespace osu.Game.Screens.Select
 
         protected override bool OnHover(HoverEvent e) => true;
 
-        private partial class FilterControlTextBox : SeekLimitedSearchTextBox
+        internal partial class FilterControlTextBox : SeekLimitedSearchTextBox
         {
             private const float filter_text_size = 12;
 

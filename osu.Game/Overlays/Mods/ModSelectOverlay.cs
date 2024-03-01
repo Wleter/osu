@@ -15,6 +15,7 @@ using osu.Framework.Graphics.Cursor;
 using osu.Framework.Input;
 using osu.Framework.Input.Bindings;
 using osu.Framework.Input.Events;
+using osu.Framework.Localisation;
 using osu.Framework.Utils;
 using osu.Game.Audio;
 using osu.Game.Beatmaps;
@@ -115,6 +116,7 @@ namespace osu.Game.Overlays.Mods
         public IEnumerable<ModState> AllAvailableMods => AvailableMods.Value.SelectMany(pair => pair.Value);
 
         private readonly BindableBool customisationVisible = new BindableBool();
+        private Bindable<bool> textSearchStartsActive = null!;
 
         private ModSettingsArea modSettingsArea = null!;
         private ColumnScrollContainer columnScroll = null!;
@@ -124,12 +126,14 @@ namespace osu.Game.Overlays.Mods
         private DeselectAllModsButton deselectAllModsButton = null!;
 
         private Container aboveColumnsContent = null!;
-        private ScoreMultiplierDisplay? multiplierDisplay;
+        private RankingInformationDisplay? rankingInformationDisplay;
         private BeatmapAttributesDisplay? beatmapAttributesDisplay;
 
         protected ShearedButton BackButton { get; private set; } = null!;
         protected ShearedToggleButton? CustomisationButton { get; private set; }
         protected SelectAllModsButton? SelectAllModsButton { get; set; }
+
+        private bool textBoxShouldFocus;
 
         private Sample? columnAppearSample;
 
@@ -154,7 +158,7 @@ namespace osu.Game.Overlays.Mods
         }
 
         [BackgroundDependencyLoader]
-        private void load(OsuGameBase game, OsuColour colours, AudioManager audio)
+        private void load(OsuGameBase game, OsuColour colours, AudioManager audio, OsuConfigManager configManager)
         {
             Header.Title = ModSelectOverlayStrings.ModSelectTitle;
             Header.Description = ModSelectOverlayStrings.ModSelectDescription;
@@ -182,7 +186,7 @@ namespace osu.Game.Overlays.Mods
                 aboveColumnsContent = new Container
                 {
                     RelativeSizeAxes = Axes.X,
-                    Height = ScoreMultiplierDisplay.HEIGHT,
+                    Height = RankingInformationDisplay.HEIGHT,
                     Padding = new MarginPadding { Horizontal = 100 },
                     Child = SearchTextBox = new ShearedSearchTextBox
                     {
@@ -197,7 +201,7 @@ namespace osu.Game.Overlays.Mods
                     {
                         Padding = new MarginPadding
                         {
-                            Top = ScoreMultiplierDisplay.HEIGHT + PADDING,
+                            Top = RankingInformationDisplay.HEIGHT + PADDING,
                             Bottom = PADDING
                         },
                         RelativeSizeAxes = Axes.Both,
@@ -266,7 +270,7 @@ namespace osu.Game.Overlays.Mods
                     },
                     Children = new Drawable[]
                     {
-                        multiplierDisplay = new ScoreMultiplierDisplay
+                        rankingInformationDisplay = new RankingInformationDisplay
                         {
                             Anchor = Anchor.BottomRight,
                             Origin = Anchor.BottomRight
@@ -282,6 +286,8 @@ namespace osu.Game.Overlays.Mods
             }
 
             globalAvailableMods.BindTo(game.AvailableMods);
+
+            textSearchStartsActive = configManager.GetBindable<bool>(OsuSetting.ModSelectTextSearchStartsActive);
         }
 
         public override void Hide()
@@ -310,7 +316,7 @@ namespace osu.Game.Overlays.Mods
 
             SelectedMods.BindValueChanged(_ =>
             {
-                updateMultiplier();
+                updateRankingInformation();
                 updateFromExternalSelection();
                 updateCustomisation();
 
@@ -323,7 +329,7 @@ namespace osu.Game.Overlays.Mods
                     //
                     // See https://github.com/ppy/osu/pull/23284#issuecomment-1529056988
                     modSettingChangeTracker = new ModSettingChangeTracker(SelectedMods.Value);
-                    modSettingChangeTracker.SettingChanged += _ => updateMultiplier();
+                    modSettingChangeTracker.SettingChanged += _ => updateRankingInformation();
                 }
             }, true);
 
@@ -344,15 +350,18 @@ namespace osu.Game.Overlays.Mods
             });
         }
 
+        private static readonly LocalisableString input_search_placeholder = Resources.Localisation.Web.CommonStrings.InputSearch;
+        private static readonly LocalisableString tab_to_search_placeholder = ModSelectOverlayStrings.TabToSearch;
+
         protected override void Update()
         {
             base.Update();
 
-            SearchTextBox.PlaceholderText = SearchTextBox.HasFocus ? Resources.Localisation.Web.CommonStrings.InputSearch : ModSelectOverlayStrings.TabToSearch;
+            SearchTextBox.PlaceholderText = SearchTextBox.HasFocus ? input_search_placeholder : tab_to_search_placeholder;
 
             if (beatmapAttributesDisplay != null)
             {
-                float rightEdgeOfLastButton = footerButtonFlow.Last().ScreenSpaceDrawQuad.TopRight.X;
+                float rightEdgeOfLastButton = footerButtonFlow[^1].ScreenSpaceDrawQuad.TopRight.X;
 
                 // this is cheating a bit; the 640 value is hardcoded based on how wide the expanded panel _generally_ is.
                 // due to the transition applied, the raw screenspace quad of the panel cannot be used, as it will trigger an ugly feedback cycle of expanding and collapsing.
@@ -442,12 +451,12 @@ namespace osu.Game.Overlays.Mods
         private void filterMods()
         {
             foreach (var modState in AllAvailableMods)
-                modState.ValidForSelection.Value = modState.Mod.HasImplementation && IsValidMod.Invoke(modState.Mod);
+                modState.ValidForSelection.Value = modState.Mod.Type != ModType.System && modState.Mod.HasImplementation && IsValidMod.Invoke(modState.Mod);
         }
 
-        private void updateMultiplier()
+        private void updateRankingInformation()
         {
-            if (multiplierDisplay == null)
+            if (rankingInformationDisplay == null)
                 return;
 
             double multiplier = 1.0;
@@ -455,7 +464,8 @@ namespace osu.Game.Overlays.Mods
             foreach (var mod in SelectedMods.Value)
                 multiplier *= mod.ScoreMultiplier;
 
-            multiplierDisplay.Current.Value = multiplier;
+            rankingInformationDisplay.ModMultiplier.Value = multiplier;
+            rankingInformationDisplay.Ranked.Value = SelectedMods.Value.All(m => m.Ranked);
         }
 
         private void updateCustomisation()
@@ -505,6 +515,11 @@ namespace osu.Game.Overlays.Mods
 
             modSettingsArea.ResizeHeightTo(modAreaHeight, transition_duration, Easing.InOutCubic);
             TopLevelContent.MoveToY(-modAreaHeight, transition_duration, Easing.InOutCubic);
+
+            if (customisationVisible.Value)
+                SearchTextBox.KillFocus();
+            else
+                setTextBoxFocus(textBoxShouldFocus);
         }
 
         /// <summary>
@@ -617,6 +632,8 @@ namespace osu.Game.Overlays.Mods
 
                 nonFilteredColumnCount += 1;
             }
+
+            setTextBoxFocus(textSearchStartsActive.Value);
         }
 
         protected override void PopOut()
@@ -707,7 +724,10 @@ namespace osu.Game.Overlays.Mods
                     ModState? firstMod = columnFlow.Columns.OfType<ModColumn>().FirstOrDefault(m => m.IsPresent)?.AvailableMods.FirstOrDefault(x => x.Visible);
 
                     if (firstMod is not null)
+                    {
                         firstMod.Active.Value = !firstMod.Active.Value;
+                        SearchTextBox.SelectAll();
+                    }
 
                     return true;
                 }
@@ -755,12 +775,18 @@ namespace osu.Game.Overlays.Mods
                 return false;
 
             // TODO: should probably eventually support typical platform search shortcuts (`Ctrl-F`, `/`)
-            if (SearchTextBox.HasFocus)
-                SearchTextBox.KillFocus();
-            else
-                SearchTextBox.TakeFocus();
-
+            setTextBoxFocus(!textBoxShouldFocus);
             return true;
+        }
+
+        private void setTextBoxFocus(bool keepFocus)
+        {
+            textBoxShouldFocus = keepFocus;
+
+            if (textBoxShouldFocus)
+                SearchTextBox.TakeFocus();
+            else
+                SearchTextBox.KillFocus();
         }
 
         #endregion
