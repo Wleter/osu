@@ -50,7 +50,7 @@ namespace osu.Game.Rulesets.Osu.Difficulty.Skills
             return totalStrain;
         }
 
-        public double RelevantNoteCount()
+        public override double EffNoteCount()
         {
             if (objectStrains.Count == 0)
                 return 0;
