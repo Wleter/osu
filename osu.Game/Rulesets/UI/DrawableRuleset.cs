@@ -65,21 +65,19 @@ namespace osu.Game.Rulesets.UI
         /// </summary>
         public override Playfield Playfield => playfield.Value;
 
+        public override PlayfieldAdjustmentContainer PlayfieldAdjustmentContainer => playfieldAdjustmentContainer;
+
         public override Container Overlays { get; } = new Container { RelativeSizeAxes = Axes.Both };
 
         public override IAdjustableAudioComponent Audio => audioContainer;
 
         private readonly AudioContainer audioContainer = new AudioContainer { RelativeSizeAxes = Axes.Both };
 
-        /// <summary>
-        /// A container which encapsulates the <see cref="Playfield"/> and provides any adjustments to
-        /// ensure correct scale and position.
-        /// </summary>
-        public virtual PlayfieldAdjustmentContainer PlayfieldAdjustmentContainer { get; private set; }
-
         public override Container FrameStableComponents { get; } = new Container { RelativeSizeAxes = Axes.Both };
 
         public override IFrameStableClock FrameStableClock => frameStabilityContainer;
+
+        private readonly PlayfieldAdjustmentContainer playfieldAdjustmentContainer;
 
         private bool allowBackwardsSeeks;
 
@@ -135,8 +133,7 @@ namespace osu.Game.Rulesets.UI
         protected DrawableRuleset(Ruleset ruleset, IBeatmap beatmap, IReadOnlyList<Mod> mods = null)
             : base(ruleset)
         {
-            if (beatmap == null)
-                throw new ArgumentNullException(nameof(beatmap), "Beatmap cannot be null.");
+            ArgumentNullException.ThrowIfNull(beatmap);
 
             if (!(beatmap is Beatmap<TObject> tBeatmap))
                 throw new ArgumentException($"{GetType()} expected the beatmap to contain hitobjects of type {typeof(TObject)}.", nameof(beatmap));
@@ -147,6 +144,7 @@ namespace osu.Game.Rulesets.UI
             RelativeSizeAxes = Axes.Both;
 
             KeyBindingInputManager = CreateInputManager();
+            playfieldAdjustmentContainer = CreatePlayfieldAdjustmentContainer();
             playfield = new Lazy<Playfield>(() => CreatePlayfield().With(p =>
             {
                 p.NewResult += (_, r) => NewResult?.Invoke(r);
@@ -198,8 +196,7 @@ namespace osu.Game.Rulesets.UI
                     audioContainer.WithChild(KeyBindingInputManager
                         .WithChildren(new Drawable[]
                         {
-                            PlayfieldAdjustmentContainer = CreatePlayfieldAdjustmentContainer()
-                                .WithChild(Playfield),
+                            playfieldAdjustmentContainer.WithChild(Playfield),
                             Overlays
                         })),
                 }
@@ -241,7 +238,7 @@ namespace osu.Game.Rulesets.UI
 
         public override void RequestResume(Action continueResume)
         {
-            if (ResumeOverlay != null && UseResumeOverlay && (Cursor == null || (Cursor.LastFrameState == Visibility.Visible && Contains(Cursor.ActiveCursor.ScreenSpaceDrawQuad.Centre))))
+            if (ResumeOverlay != null && UseResumeOverlay)
             {
                 ResumeOverlay.GameplayCursor = Cursor;
                 ResumeOverlay.ResumeAction = continueResume;
@@ -458,6 +455,12 @@ namespace osu.Game.Rulesets.UI
         public abstract Playfield Playfield { get; }
 
         /// <summary>
+        /// A container which encapsulates the <see cref="Playfield"/> and provides any adjustments to
+        /// ensure correct scale and position.
+        /// </summary>
+        public abstract PlayfieldAdjustmentContainer PlayfieldAdjustmentContainer { get; }
+
+        /// <summary>
         /// Content to be placed above hitobjects. Will be affected by frame stability and adjustments applied to <see cref="Audio"/>.
         /// </summary>
         public abstract Container Overlays { get; }
@@ -530,7 +533,7 @@ namespace osu.Game.Rulesets.UI
         public ResumeOverlay ResumeOverlay { get; protected set; }
 
         /// <summary>
-        /// Whether the <see cref="ResumeOverlay"/> should be used to return the user's cursor position to its previous location after a pause.
+        /// Whether a <see cref="ResumeOverlay"/> should be displayed on resuming after a pause.
         /// </summary>
         /// <remarks>
         /// Defaults to <c>true</c>.
