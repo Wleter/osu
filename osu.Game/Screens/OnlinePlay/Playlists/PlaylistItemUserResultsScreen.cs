@@ -4,7 +4,6 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using osu.Game.Online.API;
 using osu.Game.Online.Rooms;
 using osu.Game.Scoring;
 
@@ -19,8 +18,6 @@ namespace osu.Game.Screens.OnlinePlay.Playlists
             : base(score, roomId, playlistItem)
         {
         }
-
-        protected override APIRequest<MultiplayerScore> CreateScoreRequest() => new ShowPlaylistUserScoreRequest(RoomId, PlaylistItem.ID, API.LocalUser.Value.Id);
 
         protected override ScoreInfo[] PerformSuccessCallback(Action<IEnumerable<ScoreInfo>> callback, List<MultiplayerScore> scores, MultiplayerScores? pivot = null)
         {

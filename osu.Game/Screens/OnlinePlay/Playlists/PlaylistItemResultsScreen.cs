@@ -3,7 +3,6 @@
 
 using System;
 using System.Collections.Generic;
-using System.Diagnostics;
 using System.Linq;
 using osu.Framework.Allocation;
 using osu.Framework.Graphics;
@@ -13,6 +12,7 @@ using osu.Game.Online.API;
 using osu.Game.Online.Rooms;
 using osu.Game.Rulesets;
 using osu.Game.Scoring;
+using osu.Game.Screens.OnlinePlay.Multiplayer;
 using osu.Game.Screens.Ranking;
 
 namespace osu.Game.Screens.OnlinePlay.Playlists
@@ -26,17 +26,16 @@ namespace osu.Game.Screens.OnlinePlay.Playlists
         protected LoadingSpinner CentreSpinner { get; private set; } = null!;
         protected LoadingSpinner RightSpinner { get; private set; } = null!;
 
-        private MultiplayerScores? higherScores;
-        private MultiplayerScores? lowerScores;
-
         [Resolved]
-        protected IAPIProvider API { get; private set; } = null!;
+        protected IAPIProvider API { get; set; } = null!;
 
         [Resolved]
         protected ScoreManager ScoreManager { get; private set; } = null!;
 
         [Resolved]
         protected RulesetStore Rulesets { get; private set; } = null!;
+
+        public MultiplayerLeaderboardScoresProvider ScoresProvider { get; init; } = null!;
 
         protected PlaylistItemResultsScreen(ScoreInfo? score, long roomId, PlaylistItem playlistItem)
             : base(score)
@@ -74,111 +73,25 @@ namespace osu.Game.Screens.OnlinePlay.Playlists
             });
         }
 
-        protected abstract APIRequest<MultiplayerScore> CreateScoreRequest();
-
-        protected sealed override APIRequest FetchScores(Action<IEnumerable<ScoreInfo>> scoresCallback)
+        protected override void Update()
         {
-            // This performs two requests:
-            // 1. A request to show the relevant score (and scores around).
-            // 2. If that fails, a request to index the room starting from the highest score.
+            base.Update();
 
-            var userScoreReq = CreateScoreRequest();
-
-            userScoreReq.Success += userScore =>
+            if (LastFetchCompleted)
             {
-                var allScores = new List<MultiplayerScore> { userScore };
+                APIRequest? nextPageRequest = null;
 
-                // Other scores could have arrived between score submission and entering the results screen. Ensure the local player score position is up to date.
-                if (Score != null)
+                if (ScorePanelList.IsScrolledToStart)
+                    nextPageRequest = ScoresProvider.FetchNextPage(-1);
+                else if (ScorePanelList.IsScrolledToEnd)
+                    nextPageRequest = ScoresProvider.FetchNextPage(1);
+
+                if (nextPageRequest != null)
                 {
-                    Score.Position = userScore.Position;
-                    ScorePanelList.GetPanelForScore(Score).ScorePosition.Value = userScore.Position;
+                    LastFetchCompleted = false;
+                    API.Queue(nextPageRequest);
                 }
-
-                if (userScore.ScoresAround?.Higher != null)
-                {
-                    allScores.AddRange(userScore.ScoresAround.Higher.Scores);
-                    higherScores = userScore.ScoresAround.Higher;
-
-                    Debug.Assert(userScore.Position != null);
-                    setPositions(higherScores, userScore.Position.Value, -1);
-                }
-
-                if (userScore.ScoresAround?.Lower != null)
-                {
-                    allScores.AddRange(userScore.ScoresAround.Lower.Scores);
-                    lowerScores = userScore.ScoresAround.Lower;
-
-                    Debug.Assert(userScore.Position != null);
-                    setPositions(lowerScores, userScore.Position.Value, 1);
-                }
-
-                Schedule(() =>
-                {
-                    PerformSuccessCallback(scoresCallback, allScores);
-                    hideLoadingSpinners();
-                });
-            };
-
-            // On failure, fallback to a normal index.
-            userScoreReq.Failure += _ => API.Queue(createIndexRequest(scoresCallback));
-
-            return userScoreReq;
-        }
-
-        protected override APIRequest? FetchNextPage(int direction, Action<IEnumerable<ScoreInfo>> scoresCallback)
-        {
-            Debug.Assert(direction == 1 || direction == -1);
-
-            MultiplayerScores? pivot = direction == -1 ? higherScores : lowerScores;
-
-            if (pivot?.Cursor == null)
-                return null;
-
-            if (pivot == higherScores)
-                LeftSpinner.Show();
-            else
-                RightSpinner.Show();
-
-            return createIndexRequest(scoresCallback, pivot);
-        }
-
-        /// <summary>
-        /// Creates a <see cref="IndexPlaylistScoresRequest"/> with an optional score pivot.
-        /// </summary>
-        /// <remarks>Does not queue the request.</remarks>
-        /// <param name="scoresCallback">The callback to perform with the resulting scores.</param>
-        /// <param name="pivot">An optional score pivot to retrieve scores around. Can be null to retrieve scores from the highest score.</param>
-        /// <returns>The indexing <see cref="APIRequest"/>.</returns>
-        private APIRequest createIndexRequest(Action<IEnumerable<ScoreInfo>> scoresCallback, MultiplayerScores? pivot = null)
-        {
-            var indexReq = pivot != null
-                ? new IndexPlaylistScoresRequest(RoomId, PlaylistItem.ID, pivot.Cursor, pivot.Params)
-                : new IndexPlaylistScoresRequest(RoomId, PlaylistItem.ID);
-
-            indexReq.Success += r =>
-            {
-                if (pivot == lowerScores)
-                {
-                    lowerScores = r;
-                    setPositions(r, pivot, 1);
-                }
-                else
-                {
-                    higherScores = r;
-                    setPositions(r, pivot, -1);
-                }
-
-                Schedule(() =>
-                {
-                    PerformSuccessCallback(scoresCallback, r.Scores, r);
-                    hideLoadingSpinners(r);
-                });
-            };
-
-            indexReq.Failure += _ => hideLoadingSpinners(pivot);
-
-            return indexReq;
+            }
         }
 
         /// <summary>
@@ -201,34 +114,10 @@ namespace osu.Game.Screens.OnlinePlay.Playlists
         {
             CentreSpinner.Hide();
 
-            if (pivot == lowerScores)
+            if (pivot == ScoresProvider.LowerScores)
                 RightSpinner.Hide();
-            else if (pivot == higherScores)
+            else if (pivot == ScoresProvider.HigherScores)
                 LeftSpinner.Hide();
-        }
-
-        /// <summary>
-        /// Applies positions to all <see cref="MultiplayerScore"/>s referenced to a given pivot.
-        /// </summary>
-        /// <param name="scores">The <see cref="MultiplayerScores"/> to set positions on.</param>
-        /// <param name="pivot">The pivot.</param>
-        /// <param name="increment">The amount to increment the pivot position by for each <see cref="MultiplayerScore"/> in <paramref name="scores"/>.</param>
-        private void setPositions(MultiplayerScores scores, MultiplayerScores? pivot, int increment)
-            => setPositions(scores, pivot?.Scores[^1].Position ?? 0, increment);
-
-        /// <summary>
-        /// Applies positions to all <see cref="MultiplayerScore"/>s referenced to a given pivot.
-        /// </summary>
-        /// <param name="scores">The <see cref="MultiplayerScores"/> to set positions on.</param>
-        /// <param name="pivotPosition">The pivot position.</param>
-        /// <param name="increment">The amount to increment the pivot position by for each <see cref="MultiplayerScore"/> in <paramref name="scores"/>.</param>
-        private void setPositions(MultiplayerScores scores, int pivotPosition, int increment)
-        {
-            foreach (var s in scores.Scores)
-            {
-                pivotPosition += increment;
-                s.Position = pivotPosition;
-            }
         }
 
         private partial class PanelListLoadingSpinner : LoadingSpinner
