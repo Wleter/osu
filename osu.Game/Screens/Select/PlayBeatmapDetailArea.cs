@@ -67,8 +67,12 @@ namespace osu.Game.Screens.Select
             switch (tab)
             {
                 case BeatmapDetailAreaLeaderboardTabItem<BeatmapLeaderboardScope> leaderboard:
-                    Leaderboard.Scope = leaderboard.Scope;
-                    Leaderboard.Show();
+                    var scoresProvider = BeatmapLeaderboardProvider.GetProviderForScope(leaderboard.Scope);
+                    LoadComponentAsync(scoresProvider, scoresProvider =>
+                    {
+                        Leaderboard.ScoresProvider = scoresProvider;
+                        Leaderboard.Show();
+                    });
                     break;
 
                 default:
