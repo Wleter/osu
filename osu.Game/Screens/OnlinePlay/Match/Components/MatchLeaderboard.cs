@@ -1,8 +1,10 @@
 // Copyright (c) ppy Pty Ltd <contact@ppy.sh>. Licensed under the MIT Licence.
 // See the LICENCE file in the repository root for full licence text.
 
+using System;
 using System.ComponentModel;
 using System.Threading;
+using osu.Framework.Allocation;
 using osu.Game.Online.API;
 using osu.Game.Online.API.Requests.Responses;
 using osu.Game.Online.Leaderboards;
@@ -13,6 +15,9 @@ namespace osu.Game.Screens.OnlinePlay.Match.Components
     public partial class MatchLeaderboard : Leaderboard<MatchLeaderboardScope, APIUserScoreAggregate>
     {
         private readonly Room room;
+
+        [Resolved(CanBeNull = true)]
+        private IAPIProvider? api { get; set; }
 
         public MatchLeaderboard(Room room)
         {
@@ -44,10 +49,10 @@ namespace osu.Game.Screens.OnlinePlay.Match.Components
 
         protected override bool IsOnlineScope => true;
 
-        protected override APIRequest? FetchScores(CancellationToken cancellationToken)
+        protected override void FetchScores(CancellationToken cancellationToken)
         {
             if (room.RoomID == null)
-                return null;
+                return;
 
             var req = new GetRoomLeaderboardRequest(room.RoomID.Value);
 
@@ -59,7 +64,15 @@ namespace osu.Game.Screens.OnlinePlay.Match.Components
                 SetScores(r.Leaderboard, r.UserScore);
             });
 
-            return req;
+            req.Failure += e => Schedule(() =>
+            {
+                if (e is OperationCanceledException || cancellationToken.IsCancellationRequested)
+                    return;
+
+                SetErrorState(LeaderboardState.NetworkFailure);
+            });
+
+            api?.Queue(req);
         }
 
         protected override LeaderboardScore CreateDrawableScore(APIUserScoreAggregate model, int index) => new MatchLeaderboardScore(model, index);

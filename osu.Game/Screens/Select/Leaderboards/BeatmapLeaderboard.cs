@@ -30,7 +30,16 @@ namespace osu.Game.Screens.Select.Leaderboards
                 scoresProvider = value;
 
                 if (scoresProvider != null)
+                {
                     scoresProvider.OnScoresFetched += (u) => SetScores(u.Scores, u.UserScore);
+                    scoresProvider.OnFetchedFailure += (e, token) =>
+                    {
+                        if (e is OperationCanceledException || token.IsCancellationRequested)
+                            return;
+
+                        SetErrorState(LeaderboardState.NetworkFailure);
+                    };
+                }
 
                 RefetchScores();
             }
@@ -100,20 +109,20 @@ namespace osu.Game.Screens.Select.Leaderboards
 
         protected override bool IsOnlineScope => ScoresProvider is OnlineBeatmapLeaderboardProvider;
 
-        protected override APIRequest? FetchScores(CancellationToken cancellationToken)
+        protected override void FetchScores(CancellationToken cancellationToken)
         {
             var fetchBeatmapInfo = BeatmapInfo;
 
             if (fetchBeatmapInfo == null || ScoresProvider == null)
             {
                 SetErrorState(LeaderboardState.NoneSelected);
-                return null;
+                return;
             }
 
-            if (!api.LocalUser.Value.IsSupporter && ScoresProvider.RequireSupporter(filterMods))
+            if (!api.LocalUser.Value.IsSupporter && isSupporterRequired(filterMods))
             {
                 SetErrorState(LeaderboardState.NotSupporter);
-                return null;
+                return;
             }
 
             var fetchRuleset = ruleset.Value ?? fetchBeatmapInfo.Ruleset;
@@ -123,19 +132,19 @@ namespace osu.Game.Screens.Select.Leaderboards
                 if (!api.IsLoggedIn)
                 {
                     SetErrorState(LeaderboardState.NotLoggedIn);
-                    return null;
+                    return;
                 }
 
                 if (!fetchRuleset.IsLegacyRuleset())
                 {
                     SetErrorState(LeaderboardState.RulesetUnavailable);
-                    return null;
+                    return;
                 }
 
                 if (fetchBeatmapInfo.OnlineID <= 0 || fetchBeatmapInfo.Status <= BeatmapOnlineStatus.Pending)
                 {
                     SetErrorState(LeaderboardState.BeatmapUnavailable);
-                    return null;
+                    return;
                 }
             }
 
@@ -154,7 +163,26 @@ namespace osu.Game.Screens.Select.Leaderboards
                 RequestMods = requestMods
             };
 
-            return ScoresProvider.FetchScores(criteria, cancellationToken);
+            ScoresProvider.FetchScores(criteria, cancellationToken);
+        }
+
+        private bool isSupporterRequired(bool filterMods)
+        {
+            if (ScoresProvider == null)
+                return false;
+
+            switch (ScoresProvider.Scope)
+            {
+                case BeatmapLeaderboardScope.Local:
+                    return false;
+                case BeatmapLeaderboardScope.Global:
+                    return filterMods;
+                case BeatmapLeaderboardScope.Country:
+                case BeatmapLeaderboardScope.Friend:
+                    return true;
+                default:
+                    return false;
+            }
         }
 
         protected override LeaderboardScore CreateDrawableScore(ScoreInfo model, int index) => new LeaderboardScore(model, index, IsOnlineScope)

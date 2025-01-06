@@ -31,11 +31,29 @@ namespace osu.Game.Screens.Select.Leaderboards
 
     public abstract partial class BeatmapLeaderboardProvider : Component
     {
-        public abstract bool RequireSupporter(bool filterMods);
+        public abstract BeatmapLeaderboardScope Scope { get; }
 
         public Action<LeaderboardScores<ScoreInfo>>? OnScoresFetched;
 
-        public abstract APIRequest? FetchScores(BeatmapScoresCriteria criteria, CancellationToken token);
+        public Action<Exception, CancellationToken>? OnFetchedFailure;
+
+        [Resolved(CanBeNull = true)]
+        private IAPIProvider? api { get; set; }
+
+        public void FetchScores(BeatmapScoresCriteria criteria, CancellationToken cancellationToken)
+        {
+            var fetchScoresRequest = FetchScoresRequest(criteria, cancellationToken);
+
+            if (fetchScoresRequest == null)
+                return;
+
+            if (OnFetchedFailure != null)
+                fetchScoresRequest.Failure += e => OnFetchedFailure.Invoke(e, cancellationToken);
+
+            api?.Queue(fetchScoresRequest);
+        }
+
+        protected abstract APIRequest? FetchScoresRequest(BeatmapScoresCriteria criteria, CancellationToken token);
 
         public static BeatmapLeaderboardProvider GetProviderForScope(BeatmapLeaderboardScope scope)
         {
@@ -57,13 +75,13 @@ namespace osu.Game.Screens.Select.Leaderboards
 
     public partial class LocalBeatmapLeaderboardProvider : BeatmapLeaderboardProvider, IDisposable
     {
+        public override BeatmapLeaderboardScope Scope => BeatmapLeaderboardScope.Local;
+
         [Resolved]
         private RealmAccess realm { get; set; } = null!;
         private IDisposable? scoreSubscription;
 
-        public override bool RequireSupporter(bool filterMods) => false;
-
-        public override APIRequest? FetchScores(BeatmapScoresCriteria criteria, CancellationToken token)
+        protected override APIRequest? FetchScoresRequest(BeatmapScoresCriteria criteria, CancellationToken token)
         {
             Debug.Assert(criteria.BeatmapInfo != null);
 
@@ -130,9 +148,7 @@ namespace osu.Game.Screens.Select.Leaderboards
 
         private GetScoresRequest? scoreRetrievalRequest;
 
-        protected abstract BeatmapLeaderboardScope Scope { get; }
-
-        public override APIRequest? FetchScores(BeatmapScoresCriteria criteria, CancellationToken token)
+        protected override APIRequest? FetchScoresRequest(BeatmapScoresCriteria criteria, CancellationToken token)
         {
             scoreRetrievalRequest?.Cancel();
             scoreRetrievalRequest = null;
@@ -174,22 +190,16 @@ namespace osu.Game.Screens.Select.Leaderboards
 
     public partial class GlobalBeatmapLeaderboardProvider : OnlineBeatmapLeaderboardProvider
     {
-        public override bool RequireSupporter(bool filterMods) => filterMods;
-
-        protected override BeatmapLeaderboardScope Scope => BeatmapLeaderboardScope.Global;
+        public override BeatmapLeaderboardScope Scope => BeatmapLeaderboardScope.Global;
     }
 
     public partial class CountryBeatmapLeaderboardProvider : OnlineBeatmapLeaderboardProvider
     {
-        public override bool RequireSupporter(bool filterMods) => true;
-
-        protected override BeatmapLeaderboardScope Scope => BeatmapLeaderboardScope.Country;
+        public override BeatmapLeaderboardScope Scope => BeatmapLeaderboardScope.Country;
     }
 
     public partial class FriendBeatmapLeaderboardProvider : OnlineBeatmapLeaderboardProvider
     {
-        public override bool RequireSupporter(bool filterMods) => true;
-
-        protected override BeatmapLeaderboardScope Scope => BeatmapLeaderboardScope.Friend;
+        public override BeatmapLeaderboardScope Scope => BeatmapLeaderboardScope.Friend;
     }
 }

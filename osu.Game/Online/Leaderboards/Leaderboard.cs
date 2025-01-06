@@ -58,29 +58,12 @@ namespace osu.Game.Online.Leaderboards
         private CancellationTokenSource? currentFetchCancellationSource;
         private CancellationTokenSource? currentScoresAsyncLoadCancellationSource;
 
-        private APIRequest? fetchScoresRequest;
-
         private LeaderboardState state;
 
         [Resolved(CanBeNull = true)]
         private IAPIProvider? api { get; set; }
 
         private readonly IBindable<APIState> apiState = new Bindable<APIState>();
-
-        private TScope scope = default!;
-
-        public TScope Scope
-        {
-            get => scope;
-            set
-            {
-                if (EqualityComparer<TScope>.Default.Equals(value, scope))
-                    return;
-
-                scope = value;
-                RefetchScores();
-            }
-        }
 
         protected Leaderboard()
         {
@@ -216,10 +199,9 @@ namespace osu.Game.Online.Leaderboards
 
         /// <summary>
         /// Performs a fetch/refresh of scores to be displayed.
-        /// </summary>
         /// <param name="cancellationToken"></param>
-        /// <returns>An <see cref="APIRequest"/> responsible for the fetch operation. This will be queued and performed automatically.</returns>
-        protected abstract APIRequest? FetchScores(CancellationToken cancellationToken);
+        /// </summary>
+        protected abstract void FetchScores(CancellationToken cancellationToken);
 
         protected abstract LeaderboardScore CreateDrawableScore(TScoreInfo model, int index);
 
@@ -234,27 +216,13 @@ namespace osu.Game.Online.Leaderboards
 
             currentFetchCancellationSource = new CancellationTokenSource();
 
-            fetchScoresRequest = FetchScores(currentFetchCancellationSource.Token);
-
-            if (fetchScoresRequest == null)
-                return;
-
-            fetchScoresRequest.Failure += e => Schedule(() =>
-            {
-                if (e is OperationCanceledException || currentFetchCancellationSource.IsCancellationRequested)
-                    return;
-
-                SetErrorState(LeaderboardState.NetworkFailure);
-            });
-
-            api?.Queue(fetchScoresRequest);
+            FetchScores(currentFetchCancellationSource.Token);
         }
 
         private void cancelPendingWork()
         {
             currentFetchCancellationSource?.Cancel();
             currentScoresAsyncLoadCancellationSource?.Cancel();
-            fetchScoresRequest?.Cancel();
         }
 
         private void updateScoresDrawables()
