@@ -31,14 +31,14 @@ namespace osu.Game.Screens.Select.Leaderboards
 
                 if (scoresProvider != null)
                 {
-                    scoresProvider.OnScoresFetched += (u) => SetScores(u.Scores, u.UserScore);
-                    scoresProvider.OnFetchedFailure += (e, token) =>
+                    scoresProvider.OnScoresFetched += (u) => Schedule(() => SetScores(u.Scores, u.UserScore));
+                    scoresProvider.OnFetchedFailure += (e, token) => Schedule(() =>
                     {
                         if (e is OperationCanceledException || token.IsCancellationRequested)
                             return;
 
                         SetErrorState(LeaderboardState.NetworkFailure);
-                    };
+                    });
                 }
 
                 RefetchScores();

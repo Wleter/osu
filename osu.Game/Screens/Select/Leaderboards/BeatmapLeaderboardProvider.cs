@@ -154,8 +154,6 @@ namespace osu.Game.Screens.Select.Leaderboards
             scoreRetrievalRequest = null;
 
             var fetchBeatmapInfo = criteria.BeatmapInfo;
-            Debug.Assert(fetchBeatmapInfo != null);
-
             var fetchRuleset = criteria.Ruleset ?? fetchBeatmapInfo.Ruleset;
 
             var newRequest = new GetScoresRequest(fetchBeatmapInfo, fetchRuleset, Scope, criteria.RequestMods);
