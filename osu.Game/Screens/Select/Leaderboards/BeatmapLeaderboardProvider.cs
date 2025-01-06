@@ -48,7 +48,7 @@ namespace osu.Game.Screens.Select.Leaderboards
                 return;
 
             if (OnFetchedFailure != null)
-                fetchScoresRequest.Failure += e => OnFetchedFailure.Invoke(e, cancellationToken);
+                fetchScoresRequest.Failure += e => Schedule(() => OnFetchedFailure.Invoke(e, cancellationToken));
 
             api?.Queue(fetchScoresRequest);
         }
